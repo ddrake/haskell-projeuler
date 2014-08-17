@@ -10,5 +10,5 @@ perms [] = []
 perms [a] = [[a]]
 perms lst = concat $ zipWith (\x ps -> map (\p -> x:p) ps) lst (foldr (\x a -> (perms (lst \\ [x])):a) [] lst)
 
-millionthPerm = head . drop (1000000 - 1) $ perms [0..9]
---> [2,7,8,3,9,1,5,4,6,0]
+millionthPerm = head . drop 999999 $ perms [0..9]
+-- > [2,7,8,3,9,1,5,4,6,0]

@@ -1,0 +1,181 @@
+A Mathematical Exploration with Haskell
+
+When people ask me what I like to do for fun and I say, "Just learning math and programming", they usually give me a funny look and wander off shaking their heads.
+
+So here's an example that may help illustrate why I find this such an enjoyable pastime:
+
+I was working on this problem from Project Euler  http://projecteuler.net/problem=26
+
+A unit fraction contains 1 in the numerator. The decimal representation of the unit fractions with denominators 2 to 10 are given:
+
+    1/2 =   0.5
+    1/3 =   0.(3)
+    1/4 =   0.25
+    1/5 =   0.2
+    1/6 =   0.1(6)
+    1/7 =   0.(142857)
+    1/8 =   0.125
+    1/9 =   0.(1)
+    1/10  =   0.1
+
+Where 0.1(6) means 0.166666..., and has a 1-digit recurring cycle. It can be seen that 1/7 has a 6-digit recurring cycle.
+
+Find the value of d < 1000 for which 1/d contains the longest recurring cycle in its decimal fraction part.
+
+
+Hmm, where to start on that one?  
+
+The first thing to consider is that a floating point representation (like on a calculator) is not going to give us enough accuracy.  Instead, let's use Haskell Integers which can be as big as we want.  If we take a big power of 10 and divide it by our integer value, we'll get back an integer with lots of digits that will help us spot the patterns.
+
+Here's an example: 
+> ghci
+
+Prelude> 10^32 `div` 7
+14285714285714285714285714285714
+
+Ok, no problem spotting the pattern there.  It's 6 digits long.
+
+But what if the pattern was 100 digits long.  Counting the lengths of the patterns by hand could get to be a pain.
+
+So to start off with we need some way to get Haskell to spot recurring patterns in a list of elements.  Here's an idea -- how about if we try constructing different groupings of the digits and look for the smallest sized one where each of the groups (except possibly the last one) match the first group.
+
+So here's a simple function to help us with that
+
+groupsOf :: Eq(a) => Int -> [a] -> [[a]]
+groupsOf n [] = []
+groupsOf n xs = (take n xs) : groupsOf n (drop n xs)
+
+Now we can convert the number to a list of characters and group it like this:
+
+groupsOf 5 . show . div (10^32) $ 7
+["14285","71428","57142","85714","28571","42857","14"]
+
+No way. 5 is not the right grouping -- let's try going up to 6...
+
+groupsOf 6 . show . div (10^32) $ 7
+["142857","142857","142857","142857","142857","14"]
+
+Cool, that works.  So now, assuming that our repeating pattern is always going to start at the beginning of the list (can we assume that?  more on this later...) we can write a function that tells us if our groups match up.
+
+matches :: Eq(a) => [a] -> [a] -> Bool
+matches xs ys = xs == ys || lys < lxs && take lys xs == ys
+  where (lxs, lys) = (length xs, length ys)
+
+This should do just what we want.  It basically says that two lists match if either they're equal or the second list is shorter and matches the first part of the first list.
+
+So now we can combine 'groupsOf' and 'matches' to write a function that gets us closer to what we want:
+
+isPeriodicWith :: Eq(a) => Int -> [a] -> Bool
+isPeriodicWith n xs =
+  let (g:gs) = groupsOf n xs
+  in all (matches g) gs
+
+Let's try it out ...
+
+isPeriodicWith 5 (show . div (10^32) $ 7)
+False
+isPeriodicWith 6 (show . div (10^32) $ 7)
+True
+
+Cool, it works.  But we don't really want to have to check isPeriodicWith for each possibility, so let's write a function that does that for us.
+
+period :: Eq(a) => [a] -> Maybe Int
+period xs = 
+  let lmax = length xs `div` 2
+      period' n mx xs 
+        | n > mx = Nothing
+        | otherwise = if isPeriodicWith n xs then Just n else period' (n+1) mx xs
+  in period' 1 lmax xs
+
+period (show . div (10^32) $ 7)
+Just 6
+period [1,3,4,3,5,4,6,4,32,2,5,6,7,4]
+Nothing
+
+Nice!  If it's not periodic, it returns Nothing, otherwise it returns Just (the period).
+
+Ok, next let's make a helper function that takes a power to raise 10 (which will control how many digits we'll get in the expansion) and the number we want to test.  It returns a list of the digits obtained by dividing that big power of 10 by our number.
+
+intInvertedAsList :: Int -> Integer -> [Char]
+intInvertedAsList p n = show . div (10^p) $ n  
+
+Let's try it out.
+
+intInvertedAsList 32 7
+"14285714285714285714285714285714"
+
+period $ intInvertedAsList 32 7
+Just 6
+
+Ok, great, just like before.  But what if we try it with the inverse of 16?
+
+intInvertedAsList 32 16
+"6250000000000000000000000000000"
+
+period $ intInvertedAsList 32 16
+Nothing
+
+Hmm... So we can't really assume that the repeating part of the expansion starts with the first number in our quotient.  But maybe we can -- if we exclude any multiples of 2 and 5.  We know those will have a repeating expansion of zeros (or nines) with period 1, so let's remove them from consideration.  Will all the other numbers work the way we want?  Let's find out...  Here's a function that lets us specify an upper bound and returns a list of all the 'non-trivial' integers up to that bound.
+
+nonTrivials :: Integer -> [Integer]
+nonTrivials u = [x | x <- [3..(u-1)], x `rem` 2 /= 0, x `rem` 5 /= 0]
+
+Let's try putting this all together in an algorithm.  We've got some awesome functions that will tell us if a number has a reciprocal cycle and what its period is.  The confusing part is that we don't know up front how many digits we're going to need to look at before we can spot the pattern.  We could use some huge number, but that probably wouldn't be too efficient.  
+
+If we were going to work it out by hand for, say 23, we'd probably start with a small number of digits like 10.  So we do this:
+
+period $ intInvertedAsList 10 23
+Nothing
+
+Not enough digits, ok so let's try 10^2 digits.
+period $ intInvertedAsList 100 23
+Just 22
+
+Great, if 10^2 hadn't worked, we could have tried 10^3 and so on.  So we can try something like this:
+
+periodForNumber :: Integer -> Int
+periodForNumber n = 
+    let periodForNumber' p n = 
+          case period (intInvertedAsList (10^p) n) of 
+              Nothing -> periodForNumber' (p+1) n
+              (Just per) -> per
+    in periodForNumber' 1 n
+
+Let's try it out
+periodForNumber 11
+2
+periodForNumber 23
+22
+periodForNumber 7
+6
+
+Ok, seems to work.  Let's try mapping it over some non-trivial integers.  Let's use pairs like (number, period)
+
+map (\x -> (x, periodForNumber x)) $ nonTrivials 100
+[(3,1),(7,6),(9,1),(11,2),(13,6),(17,16),(19,18),(21,6),(23,22),(27,3),(29,28),(31,15),(33,2),(37,3),(39,6),(41,5),(43,21),(47,46),(49,42),(51,16),(53,13),(57,18),(59,58),(61,60),(63,6),(67,33),(69,22),(71,35),(73,8),(77,6),(79,13),(81,9),(83,41),(87,28),(89,44),(91,6),(93,15),(97,96),(99,2)]
+
+Seems reasonable, so let's get write a function that gives us the max pair for an upper bound
+
+maxPeriod :: Integer -> (Integer, Int)
+maxPeriod u = 
+  let pairs = map (\x -> (x, periodForNumber x)) $ nonTrivials u
+  in maximumBy (\(_,p1) (_,p2) -> compare p1 p2) $ pairs 
+
+maxPeriod 1000
+(983,982)
+
+So there's our solution to the Project Euler problem.  
+Yup, it's right (I was the 42,000th person to solve it there)
+
+But I notice something funny... do you see it?  983 is the number (less than 1000) whose reciprocal cycle has the longest period.  It's period is 982.  One less.  That seems vaguely familiar.  Oh yeah, 7 had a period of 6 and 23 had a period of 22.  Interesting, I wonder if a number could have a period greater than or equal to itself.  Let's see...
+
+filter (\(n, p) -> p >= n) . map (\x -> (x, periodForNumber x)) . nonTrivials $ 1000
+[]
+
+So here's a conjecture:
+
+Conjecture 1: For any given number n, the length of the repeating decimal expansion of 1/n cannot exceed n-1
+
+So I'm wondering whether there could be something special about these numbers with cycles of length one less than themselves.  Let's tak a look at them.  First, though, let's define 'MaxExps' to be { n <- N | the repeating decimal expansion of 1/n has length equal to n-1 }
+
+filter (\(n, p) -> p == n-1) . map (\x -> (x, periodForNumber x)) . nonTrivials $ 1000
