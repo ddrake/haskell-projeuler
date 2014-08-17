@@ -31,20 +31,6 @@ import Data.List
 
 -- How about Question 2, though...
 
--- quotientDigits 8 30 3  ->  "252525252525252525252525252525" (length 2 => MaxExp)
--- quotientDigits 8 30 5  ->  "146314631463146314631463146314" (length 4 => MaxExp)
--- quotientDigits 8 30 7  ->  "111111111111111111111111111111" (length 1 => NOT)
--- quotientDigits 8 30 11 ->  "56427213505642721350564272135"  (length 10 => MaxExp)
--- quotientDigits 8 30 13 ->  "47304730473047304730473047304"  (length 4 => NOT)
--- quotientDigits 8 30 17 ->  "36074170360741703607417036074"  (length 8 => NOT)
--- quotientDigits 8 30 19 ->  "32745032745032745032745032745"  (length 6 => NOT)
--- quotientDigits 8 30 23 ->  "26205441310262054413102620544"  (length 11 => NOT)
--- quotientDigits 8 30 31 ->  "20410204102041020410204102041"  (length 5 => NOT)
--- quotientDigits 8 80 53 ->  "1152207175453361404651034766255706023244163731267430115220717545336140465103476" (length 52 => MaxExp)
-
--- Interesting!  It appears that 3, 5 and 11 are now MaxExps, while 7, 17, 19 and 23 aren't anymore.
--- 13 isn't a MaxExp for either base and 53 is for both bases.  Wow, now those are what I call 'odd' numbers!
-
 intInvertedForBase :: Integer -> Integer -> Integer -> [Char]
 intInvertedForBase base p n = 
   let result = (base^p) `div` n 
@@ -63,6 +49,21 @@ nsWithLongest f u =
 
 nonTrivials :: Integer -> [Integer]
 nonTrivials u = [x | x <- [3..(u-1)], x `rem` 2 /= 0, x `rem` 5 /= 0]
+
+nonTrivialsForBase :: Integer -> Integer -> [Integer]
+nonTrivialsForBase base u = 
+  let divs = nub $ divisors base
+      prd x = all (\z -> rem x z /= 0)
+  in [x | x <- [2..(u-1)], prd x divs]
+
+divisors :: Integer -> [Integer]
+divisors n = 
+  let divisors' _ 1 = []
+      divisors' start n = 
+        let (q, r) = quotRem n start
+        in if r == 0 then start:divisors' start q
+           else divisors' (start+1) n
+  in divisors' 2 n
 
 -- Given a previous power of 10, a current power of 10 and an upper bound, 
 -- find a subset of the list of integers less than the bound
@@ -99,8 +100,8 @@ nonPeriodicFromListFor f p xs = filter (\x -> (period $ f p x) == Nothing) xs
 
 -- Given a power of 10 and a number, return the list of digits obtained by dividing
 -- the number by the power of 10.
-intInvertedAsList :: Integer -> Integer -> [Char]
-intInvertedAsList p n = 
+intInvertedDecimal :: Integer -> Integer -> [Char]
+intInvertedDecimal p n = 
   let p' = fromIntegral p
   in show . div (10^p') $ n  
 
@@ -158,3 +159,9 @@ maxPeriod :: (Integer -> Integer -> [Char]) -> Integer -> (Integer, Integer)
 maxPeriod f u = 
   let pairs = map (\x -> (x, periodForNumber f x)) $ nonTrivials u
   in maximumBy (\(_,p1) (_,p2) -> compare p1 p2) $ pairs 
+
+
+maxExpsForBase :: Integer -> Integer -> [Integer]
+maxExpsForBase base u = 
+  let pairs = map (\x -> (x, periodForNumber (intInvertedForBase base) x)) . nonTrivialsForBase base $ u
+  in map fst . filter (\(n, p) -> p == n-1) $ pairs
